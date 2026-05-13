@@ -8,6 +8,7 @@ from typing import Any
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 
 from utils.dag.spark_dag_utils import build_spark_command, read_setting
 
@@ -119,6 +120,13 @@ def _create_pipeline_dag(config_path: Path) -> DAG | None:
     pipeline_name = str(metadata.get("name") or config_path.stem)
     dag_id = f"{DEFAULT_DAG_PREFIX}_{_safe_dag_suffix(pipeline_name)}"
     schedule = metadata.get("schedule", DEFAULT_SCHEDULE)
+    depends_on = metadata.get("depends_on") or []
+    if isinstance(depends_on, str):
+        depends_on = [depends_on]
+    if not isinstance(depends_on, list):
+        raise ValueError(
+            f"Pipeline config section 'pipeline.depends_on' must be a list: {config_path}"
+        )
     tags = ["spark", "minio", "etl", _safe_dag_suffix(pipeline_name)]
 
     dag = DAG(
@@ -132,11 +140,30 @@ def _create_pipeline_dag(config_path: Path) -> DAG | None:
     )
 
     with dag:
-        PythonOperator(
+        wait_tasks = []
+        for dependency_name in depends_on:
+            dependency_suffix = _safe_dag_suffix(str(dependency_name))
+            wait_tasks.append(
+                ExternalTaskSensor(
+                    task_id=f"wait_for_{dependency_suffix}",
+                    external_dag_id=f"{DEFAULT_DAG_PREFIX}_{dependency_suffix}",
+                    external_task_id="run_pyspark_minio_etl",
+                    allowed_states=["success"],
+                    failed_states=["failed", "skipped"],
+                    mode="reschedule",
+                    poke_interval=60,
+                    timeout=60 * 60 * 6,
+                )
+            )
+
+        run_task = PythonOperator(
             task_id="run_pyspark_minio_etl",
             python_callable=_run_spark_job,
             op_kwargs={"config_path": str(config_path)},
         )
+
+        for wait_task in wait_tasks:
+            wait_task >> run_task
 
     return dag
 

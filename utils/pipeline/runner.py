@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import lit
@@ -69,14 +69,128 @@ def load_stage(
     output_base_path: str,
     run_id: Optional[str],
     partition_cols: list[str],
+    mode: str = "overwrite",
+    unique_run: bool = True,
 ) -> str:
     return write_minio_parquet(
         df,
         output_base_path,
-        mode="overwrite",
-        unique_run=True,
+        mode=mode,
+        unique_run=unique_run,
         run_id=run_id,
         partition_cols=partition_cols,
+    )
+
+
+def _get_reader_options(input_config: dict[str, Any], section_name: str) -> dict[str, Any]:
+    reader_options = input_config.get("options") or {}
+    if not isinstance(reader_options, dict):
+        raise ValueError(f"Pipeline config '{section_name}.options' must be an object")
+    return reader_options
+
+
+def _extract_input(
+    spark,
+    hadoop_conf,
+    bucket: str,
+    input_config: dict[str, Any],
+    section_name: str,
+) -> tuple[DataFrame, str, str]:
+    input_prefix = get_config_or_required_env(
+        input_config.get("input_prefix"),
+        "MINIO_INPUT_PREFIX",
+    )
+    input_format = str(
+        input_config.get("format")
+        or os.getenv("MINIO_INPUT_FORMAT")
+        or "parquet"
+    ).strip()
+    reader_options = _get_reader_options(input_config, section_name)
+    file_extensions = get_string_list(
+        input_config.get("file_extensions")
+        or os.getenv("MINIO_INPUT_FILE_EXTENSIONS"),
+        f"{section_name}.file_extensions",
+    )
+    frame, input_path = extract_stage(
+        spark,
+        hadoop_conf,
+        bucket,
+        input_prefix,
+        input_format,
+        reader_options,
+        file_extensions,
+    )
+    return frame, input_path, input_format
+
+
+def _extract_inputs(
+    spark,
+    hadoop_conf,
+    bucket: str,
+    extraction_config: dict[str, Any],
+) -> tuple[DataFrame | None, dict[str, DataFrame], list[str]]:
+    input_configs = extraction_config.get("inputs")
+    if input_configs is None:
+        frame, input_path, _input_format = _extract_input(
+            spark,
+            hadoop_conf,
+            bucket,
+            extraction_config,
+            "extraction",
+        )
+        return frame, {}, [input_path]
+
+    if not isinstance(input_configs, list) or not input_configs:
+        raise ValueError("Pipeline config 'extraction.inputs' must be a non-empty list")
+
+    frames_by_alias: dict[str, DataFrame] = {}
+    input_paths: list[str] = []
+    for index, input_config in enumerate(input_configs):
+        if not isinstance(input_config, dict):
+            raise ValueError(f"Input config at index {index} must be an object")
+        alias = str(input_config.get("alias") or "").strip()
+        if not alias:
+            raise ValueError(f"Input config at index {index} is missing 'alias'")
+        if alias in frames_by_alias:
+            raise ValueError(f"Duplicate input alias: {alias}")
+
+        frame, input_path, _input_format = _extract_input(
+            spark,
+            hadoop_conf,
+            bucket,
+            input_config,
+            f"extraction.inputs[{index}]",
+        )
+        frames_by_alias[alias] = frame
+        input_paths.append(input_path)
+
+    return None, frames_by_alias, input_paths
+
+
+def _apply_sql_transformation(
+    spark,
+    frames_by_alias: dict[str, DataFrame],
+    sql_query: str,
+) -> DataFrame:
+    if not sql_query.strip():
+        raise ValueError("Pipeline config 'transformation.sql' cannot be empty")
+    if not frames_by_alias:
+        raise ValueError("'transformation.sql' requires 'extraction.inputs'")
+
+    for alias, frame in frames_by_alias.items():
+        frame.createOrReplaceTempView(alias)
+    return spark.sql(sql_query)
+
+
+def _normalize_sql_query(sql_query: Any) -> str | None:
+    if sql_query is None:
+        return None
+    if isinstance(sql_query, str):
+        return sql_query
+    if isinstance(sql_query, list) and all(isinstance(line, str) for line in sql_query):
+        return "\n".join(sql_query)
+    raise ValueError(
+        "Pipeline config 'transformation.sql' must be a string or list of strings"
     )
 
 
@@ -89,39 +203,26 @@ def run_pipeline() -> None:
 
     extraction_config = get_config_section(pipeline_config, "extraction")
     loading_config = get_config_section(pipeline_config, "loading")
+    transformation_config = get_config_section(pipeline_config, "transformation")
     transform_steps = get_transform_steps(pipeline_config)
 
     minio_endpoint = get_required_env("MINIO_ENDPOINT")
     minio_access_key = get_required_env("MINIO_ACCESS_KEY")
     minio_secret_key = get_required_env("MINIO_SECRET_KEY")
     minio_bucket = get_required_env("MINIO_BUCKET")
-    minio_input_prefix = get_config_or_required_env(
-        extraction_config.get("input_prefix"),
-        "MINIO_INPUT_PREFIX",
-    )
-    input_format = str(
-        extraction_config.get("format")
-        or os.getenv("MINIO_INPUT_FORMAT")
-        or "parquet"
-    ).strip()
-    reader_options = extraction_config.get("options") or {}
-    if not isinstance(reader_options, dict):
-        raise ValueError("Pipeline config 'extraction.options' must be an object")
-    file_extensions = get_string_list(
-        extraction_config.get("file_extensions")
-        or os.getenv("MINIO_INPUT_FILE_EXTENSIONS"),
-        "extraction.file_extensions",
-    )
     minio_output_prefix = get_config_or_required_env(
         loading_config.get("output_prefix"),
         "MINIO_OUTPUT_PREFIX",
     )
-    partition_cols = get_string_list(
-        loading_config.get("partition_cols")
-        or os.getenv("MINIO_OUTPUT_PARTITION_COLS")
-        or ["etl_run_date"],
-        "loading.partition_cols",
+    partition_cols_value = (
+        loading_config["partition_cols"]
+        if "partition_cols" in loading_config
+        else os.getenv("MINIO_OUTPUT_PARTITION_COLS") or ["etl_run_date"]
     )
+    partition_cols = get_string_list(partition_cols_value, "loading.partition_cols")
+    write_mode = str(loading_config.get("mode") or "overwrite").strip()
+    unique_run = bool(loading_config.get("unique_run", True))
+    sql_query = _normalize_sql_query(transformation_config.get("sql"))
 
     pipeline_run_id = safe_run_id(
         (os.getenv("PIPELINE_RUN_ID") or "").strip() or None
@@ -142,34 +243,47 @@ def run_pipeline() -> None:
         )
 
         bucket_item_count = check_minio_ready(spark, hadoop_conf, minio_bucket)
-        extracted_df, input_path = extract_stage(
+        extracted_df, frames_by_alias, input_paths = _extract_inputs(
             spark,
             hadoop_conf,
             minio_bucket,
-            minio_input_prefix,
-            input_format,
-            reader_options,
-            file_extensions,
+            extraction_config,
         )
 
         print(f"MinIO bucket: {minio_bucket}")
         print(f"Bucket visible items: {bucket_item_count}")
-        print(f"Input path: {input_path}")
-        print(f"Total records before transform: {extracted_df.count()}")
+        print(f"Input paths: {input_paths}")
+        if extracted_df is not None:
+            print(f"Total records before transform: {extracted_df.count()}")
+        else:
+            input_counts = {
+                alias: frame.count()
+                for alias, frame in frames_by_alias.items()
+            }
+            print(f"Total records before transform by alias: {input_counts}")
         print(f"Transform steps: {[step['name'] for step in transform_steps]}")
+        print(f"SQL transform: {bool(sql_query)}")
         print(f"Output partitions: {partition_cols}")
+        print(f"Output unique run path: {unique_run}")
 
-        df_transformed = apply_transformation_steps(
-            extracted_df,
-            transform_steps,
-            pipeline_run_id,
-        )
+        if sql_query:
+            base_df = _apply_sql_transformation(spark, frames_by_alias, sql_query)
+        elif extracted_df is not None:
+            base_df = extracted_df
+        else:
+            raise ValueError(
+                "Multi-input extraction requires 'transformation.sql'"
+            )
+
+        df_transformed = apply_transformation_steps(base_df, transform_steps, pipeline_run_id)
 
         final_output_path = load_stage(
             df_transformed,
             output_base_path,
             pipeline_run_id,
             partition_cols,
+            mode=write_mode,
+            unique_run=unique_run,
         )
 
         print(f"Wrote parquet to: {final_output_path}")

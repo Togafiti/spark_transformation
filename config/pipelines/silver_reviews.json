@@ -1,0 +1,36 @@
+{
+  "pipeline": {
+    "name": "silver_reviews",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["bronze_reviews"]
+  },
+  "extraction": {
+    "input_prefix": "bronze/reviews",
+    "format": "parquet",
+    "options": {}
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "cast_columns",
+        "cast_map": {
+          "rating": "integer",
+          "review_date": "timestamp"
+        }
+      },
+      {
+        "name": "drop_duplicates",
+        "subset": ["review_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "silver/reviews",
+    "partition_cols": ["etl_run_date"],
+    "unique_run": false
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "pipeline": {
+    "name": "silver_order_items",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["bronze_order_items"]
+  },
+  "extraction": {
+    "input_prefix": "bronze/order_items",
+    "format": "parquet",
+    "options": {}
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "cast_columns",
+        "cast_map": {
+          "quantity": "integer",
+          "item_price": "double",
+          "item_total": "double"
+        }
+      },
+      {
+        "name": "drop_duplicates",
+        "subset": ["order_item_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "silver/order_items",
+    "partition_cols": ["etl_run_date"],
+    "unique_run": false
+  }
+}

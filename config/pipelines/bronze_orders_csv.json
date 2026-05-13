@@ -1,6 +1,6 @@
 {
   "pipeline": {
-    "name": "orders_csv",
+    "name": "bronze_orders",
     "schedule": "@daily",
     "enabled": true
   },
@@ -9,24 +9,18 @@
     "format": "csv",
     "options": {
       "header": true,
-      "inferSchema": true,
+      "inferSchema": false,
       "multiLine": false,
       "escape": "\"",
       "quote": "\""
     }
   },
   "transformation": {
-    "steps": [
-      {
-        "name": "standardize_column_names"
-      },
-      {
-        "name": "drop_duplicates"
-      }
-    ]
+    "steps": []
   },
   "loading": {
-    "output_prefix": "transformed/orders",
-    "partition_cols": ["etl_run_date"]
+    "output_prefix": "bronze/orders",
+    "partition_cols": [],
+    "unique_run": false
   }
 }

@@ -1,0 +1,63 @@
+{
+  "pipeline": {
+    "name": "gold_fact_order_items",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_order_items", "silver_orders", "silver_products"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "order_items",
+        "input_prefix": "silver/order_items",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "orders",
+        "input_prefix": "silver/orders",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "products",
+        "input_prefix": "silver/products",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  oi.order_item_id,",
+      "  oi.order_id,",
+      "  oi.product_id,",
+      "  oi.user_id,",
+      "  o.order_date,",
+      "  CAST(o.order_date AS DATE) AS order_day,",
+      "  o.order_status,",
+      "  oi.quantity,",
+      "  oi.item_price,",
+      "  oi.item_total,",
+      "  p.category,",
+      "  p.brand",
+      "FROM order_items oi",
+      "LEFT JOIN orders o",
+      "  ON oi.order_id = o.order_id",
+      "LEFT JOIN products p",
+      "  ON oi.product_id = p.product_id"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["order_item_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/fact_order_items",
+    "partition_cols": ["order_day"],
+    "unique_run": false
+  }
+}

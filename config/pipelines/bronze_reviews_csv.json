@@ -1,0 +1,26 @@
+{
+  "pipeline": {
+    "name": "bronze_reviews",
+    "schedule": "@daily",
+    "enabled": true
+  },
+  "extraction": {
+    "input_prefix": "ecommerce_dataset/reviews.csv",
+    "format": "csv",
+    "options": {
+      "header": true,
+      "inferSchema": false,
+      "multiLine": false,
+      "escape": "\"",
+      "quote": "\""
+    }
+  },
+  "transformation": {
+    "steps": []
+  },
+  "loading": {
+    "output_prefix": "bronze/reviews",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

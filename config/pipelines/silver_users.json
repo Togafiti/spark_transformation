@@ -1,0 +1,38 @@
+{
+  "pipeline": {
+    "name": "silver_users",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["bronze_users"]
+  },
+  "extraction": {
+    "input_prefix": "bronze/users",
+    "format": "parquet",
+    "options": {}
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "cast_columns",
+        "cast_map": {
+          "signup_date": "date"
+        },
+        "format_map": {
+          "signup_date": "yyyy-MM-dd"
+        }
+      },
+      {
+        "name": "drop_duplicates",
+        "subset": ["user_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "silver/users",
+    "partition_cols": ["etl_run_date"],
+    "unique_run": false
+  }
+}

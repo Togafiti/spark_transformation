@@ -1,0 +1,97 @@
+{
+  "pipeline": {
+    "name": "gold_product_performance",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_products", "silver_order_items", "silver_events", "silver_reviews"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "products",
+        "input_prefix": "silver/products",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "order_items",
+        "input_prefix": "silver/order_items",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "events",
+        "input_prefix": "silver/events",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "reviews",
+        "input_prefix": "silver/reviews",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "WITH sales AS (",
+      "    SELECT",
+      "        product_id,",
+      "        SUM(quantity) AS units_sold,",
+      "        SUM(item_total) AS gross_sales,",
+      "        COUNT(DISTINCT order_id) AS order_count",
+      "    FROM order_items",
+      "    GROUP BY product_id",
+      "),",
+      "activity AS (",
+      "    SELECT",
+      "        product_id,",
+      "        COUNT(*) AS event_count,",
+      "        COUNT(DISTINCT user_id) AS active_user_count",
+      "    FROM events",
+      "    GROUP BY product_id",
+      "),",
+      "feedback AS (",
+      "    SELECT",
+      "        product_id,",
+      "        COUNT(*) AS review_count,",
+      "        AVG(rating) AS avg_review_rating",
+      "    FROM reviews",
+      "    GROUP BY product_id",
+      ")",
+      "SELECT",
+      "    p.product_id,",
+      "    p.product_name,",
+      "    p.category,",
+      "    p.brand,",
+      "    p.price,",
+      "    p.rating AS catalog_rating,",
+      "    COALESCE(s.units_sold, 0) AS units_sold,",
+      "    COALESCE(s.gross_sales, 0.0) AS gross_sales,",
+      "    COALESCE(s.order_count, 0) AS order_count,",
+      "    COALESCE(a.event_count, 0) AS event_count,",
+      "    COALESCE(a.active_user_count, 0) AS active_user_count,",
+      "    COALESCE(f.review_count, 0) AS review_count,",
+      "    f.avg_review_rating",
+      "FROM products p",
+      "LEFT JOIN sales s",
+      "    ON p.product_id = s.product_id",
+      "LEFT JOIN activity a",
+      "    ON p.product_id = a.product_id",
+      "LEFT JOIN feedback f",
+      "    ON p.product_id = f.product_id"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["product_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/product_performance",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

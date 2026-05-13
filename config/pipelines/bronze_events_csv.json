@@ -1,0 +1,26 @@
+{
+  "pipeline": {
+    "name": "bronze_events",
+    "schedule": "@daily",
+    "enabled": true
+  },
+  "extraction": {
+    "input_prefix": "ecommerce_dataset/events.csv",
+    "format": "csv",
+    "options": {
+      "header": true,
+      "inferSchema": false,
+      "multiLine": false,
+      "escape": "\"",
+      "quote": "\""
+    }
+  },
+  "transformation": {
+    "steps": []
+  },
+  "loading": {
+    "output_prefix": "bronze/events",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

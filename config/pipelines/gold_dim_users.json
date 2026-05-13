@@ -1,0 +1,41 @@
+{
+  "pipeline": {
+    "name": "gold_dim_users",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_users"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "users",
+        "input_prefix": "silver/users",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  user_id,",
+      "  name,",
+      "  email,",
+      "  gender,",
+      "  city,",
+      "  signup_date",
+      "FROM users"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["user_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/dim_users",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

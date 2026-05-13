@@ -1,0 +1,60 @@
+{
+  "pipeline": {
+    "name": "gold_fact_events",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_events", "silver_products", "silver_users"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "events",
+        "input_prefix": "silver/events",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "products",
+        "input_prefix": "silver/products",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "users",
+        "input_prefix": "silver/users",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  e.event_id,",
+      "  e.user_id,",
+      "  e.product_id,",
+      "  e.event_type,",
+      "  e.event_timestamp,",
+      "  CAST(e.event_timestamp AS DATE) AS event_date,",
+      "  u.city AS user_city,",
+      "  p.category,",
+      "  p.brand",
+      "FROM events e",
+      "LEFT JOIN users u",
+      "  ON e.user_id = u.user_id",
+      "LEFT JOIN products p",
+      "  ON e.product_id = p.product_id"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["event_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/fact_events",
+    "partition_cols": ["event_date"],
+    "unique_run": false
+  }
+}

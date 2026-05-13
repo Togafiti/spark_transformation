@@ -1,0 +1,40 @@
+{
+  "pipeline": {
+    "name": "silver_products",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["bronze_products"]
+  },
+  "extraction": {
+    "input_prefix": "bronze/products",
+    "format": "parquet",
+    "options": {}
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "trim",
+        "columns": ["product_name", "category", "brand"]
+      },
+      {
+        "name": "cast_columns",
+        "cast_map": {
+          "price": "double",
+          "rating": "double"
+        }
+      },
+      {
+        "name": "drop_duplicates",
+        "subset": ["product_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "silver/products",
+    "partition_cols": ["etl_run_date"],
+    "unique_run": false
+  }
+}

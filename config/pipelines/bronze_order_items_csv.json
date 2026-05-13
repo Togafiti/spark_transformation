@@ -1,0 +1,26 @@
+{
+  "pipeline": {
+    "name": "bronze_order_items",
+    "schedule": "@daily",
+    "enabled": true
+  },
+  "extraction": {
+    "input_prefix": "ecommerce_dataset/order_items.csv",
+    "format": "csv",
+    "options": {
+      "header": true,
+      "inferSchema": false,
+      "multiLine": false,
+      "escape": "\"",
+      "quote": "\""
+    }
+  },
+  "transformation": {
+    "steps": []
+  },
+  "loading": {
+    "output_prefix": "bronze/order_items",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

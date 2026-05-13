@@ -1,0 +1,41 @@
+{
+  "pipeline": {
+    "name": "gold_dim_products",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_products"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "products",
+        "input_prefix": "silver/products",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  product_id,",
+      "  product_name,",
+      "  category,",
+      "  brand,",
+      "  price,",
+      "  rating",
+      "FROM products"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["product_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/dim_products",
+    "partition_cols": [],
+    "unique_run": false
+  }
+}

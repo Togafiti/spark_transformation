@@ -1,0 +1,51 @@
+{
+  "pipeline": {
+    "name": "gold_fact_orders",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_orders", "silver_users"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "orders",
+        "input_prefix": "silver/orders",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "users",
+        "input_prefix": "silver/users",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  o.order_id,",
+      "  o.user_id,",
+      "  o.order_date,",
+      "  CAST(o.order_date AS DATE) AS order_day,",
+      "  o.order_status,",
+      "  o.total_amount,",
+      "  u.city AS user_city,",
+      "  u.gender AS user_gender",
+      "FROM orders o",
+      "LEFT JOIN users u",
+      "  ON o.user_id = u.user_id"
+    ],
+    "steps": [
+      {
+        "name": "drop_duplicates",
+        "subset": ["order_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "gold/fact_orders",
+    "partition_cols": ["order_day"],
+    "unique_run": false
+  }
+}

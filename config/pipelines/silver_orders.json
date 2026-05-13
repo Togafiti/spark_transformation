@@ -1,0 +1,36 @@
+{
+  "pipeline": {
+    "name": "silver_orders",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["bronze_orders"]
+  },
+  "extraction": {
+    "input_prefix": "bronze/orders",
+    "format": "parquet",
+    "options": {}
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "cast_columns",
+        "cast_map": {
+          "order_date": "timestamp",
+          "total_amount": "double"
+        }
+      },
+      {
+        "name": "drop_duplicates",
+        "subset": ["order_id"]
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "silver/orders",
+    "partition_cols": ["etl_run_date"],
+    "unique_run": false
+  }
+}

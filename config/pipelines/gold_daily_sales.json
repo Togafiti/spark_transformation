@@ -1,0 +1,42 @@
+{
+  "pipeline": {
+    "name": "gold_daily_sales",
+    "schedule": "@daily",
+    "enabled": true,
+    "depends_on": ["silver_orders", "silver_order_items"]
+  },
+  "extraction": {
+    "inputs": [
+      {
+        "alias": "orders",
+        "input_prefix": "silver/orders",
+        "format": "parquet",
+        "options": {}
+      },
+      {
+        "alias": "order_items",
+        "input_prefix": "silver/order_items",
+        "format": "parquet",
+        "options": {}
+      }
+    ]
+  },
+  "transformation": {
+    "sql": [
+      "SELECT",
+      "  CAST(o.order_date AS DATE) AS order_day,",
+      "  COUNT(DISTINCT o.order_id) AS order_count,",
+      "  COUNT(oi.order_item_id) AS order_item_count",
+      "FROM orders o",
+      "LEFT JOIN order_items oi",
+      "  ON o.order_id = oi.order_id",
+      "GROUP BY CAST(o.order_date AS DATE)"
+    ],
+    "steps": []
+  },
+  "loading": {
+    "output_prefix": "gold/daily_sales",
+    "partition_cols": ["order_day"],
+    "unique_run": false
+  }
+}
