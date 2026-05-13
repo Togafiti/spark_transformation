@@ -1,0 +1,32 @@
+{
+  "pipeline": {
+    "name": "orders_csv",
+    "schedule": "@daily",
+    "enabled": true
+  },
+  "extraction": {
+    "input_prefix": "ecommerce_dataset/orders.csv",
+    "format": "csv",
+    "options": {
+      "header": true,
+      "inferSchema": true,
+      "multiLine": false,
+      "escape": "\"",
+      "quote": "\""
+    }
+  },
+  "transformation": {
+    "steps": [
+      {
+        "name": "standardize_column_names"
+      },
+      {
+        "name": "drop_duplicates"
+      }
+    ]
+  },
+  "loading": {
+    "output_prefix": "transformed/orders",
+    "partition_cols": ["etl_run_date"]
+  }
+}
