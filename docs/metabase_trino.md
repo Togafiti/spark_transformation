@@ -1,16 +1,14 @@
 # Metabase + Trino
 
-This project exposes MinIO Parquet data through Trino, then connects Metabase to Trino for dashboards.
-
-## Services
+Dự án này tích hợp hiển thị dữ liệu MinIO Parquet thông qua Trino, sau đó kết nối Metabase với Trino để tạo dashboard.
 
 - Trino UI: http://localhost:8082
 - Metabase UI: http://localhost:3000
 - MinIO Console: http://localhost:9001
 
-## Metabase Database Connection
+## Kết nối cơ sở dữ liệu Metabase
 
-In Metabase, add a database with these settings:
+Trong Metabase, hãy thêm cơ sở dữ liệu với các thiết lập sau:
 
 - Database type: `Starburst (Trino)`
 - Display name: `Warehouse Gold`
@@ -22,11 +20,11 @@ In Metabase, add a database with these settings:
 - Password: leave empty
 - SSL: disabled
 
-Use `trino:8080` inside Docker because Metabase runs in the same Compose network. Use `localhost:8082` only from the host browser or host CLI.
+Hãy sử dụng `trino:8080` bên trong Docker vì Metabase chạy trong cùng mạng Compose. Chỉ sử dụng `localhost:8082` từ trình duyệt hoặc giao diện dòng lệnh của máy chủ.
 
 ## Gold Tables
 
-The Trino bootstrap service creates external tables for:
+Dịch vụ khởi tạo Trino tạo các external tables cho:
 
 - `hive.gold.dim_users`
 - `hive.gold.dim_products`
@@ -36,15 +34,15 @@ The Trino bootstrap service creates external tables for:
 - `hive.gold.daily_sales`
 - `hive.gold.product_performance`
 
-After Airflow finishes writing partitioned gold tables, sync Hive partition metadata:
+Sau khi Airflow hoàn tất việc ghi các bảng vàng được phân vùng, hãy đồng bộ Hive partition metadata:
 
 ```powershell
 docker compose exec trino trino --server http://localhost:8080 --file /sql/sync_gold_partitions.sql
 ```
 
-Then refresh/sync the database in Metabase Admin settings so new rows and fields are visible.
+Sau đó refresh/sync the database (làm mới/đồng bộ hóa cơ sở dữ liệu) in Metabase Admin settings (cài đặt quản trị Metabase) để các hàng và trường mới hiển thị.
 
-## Quick Trino Checks
+## Kiểm tra nhanh Trino
 
 ```powershell
 docker compose exec trino trino --server http://localhost:8080 --execute "SHOW SCHEMAS FROM hive"
